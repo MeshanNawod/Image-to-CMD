@@ -1,14 +1,107 @@
-"""
-img2cmd.py - show images and videos in Command Prompt using characters like / - | \\
 
+Ran 2 commands, shared files
+img2cmd.py now plays videos as text art in Command Prompt, and README.md is updated. I tested it on a short sample video in shade, edges and color modes, but I haven’t run it on Windows.
+
+Install: videos need one more package.
+
+pip install pillow opencv-python
+Play a video:
+
+python img2cmd.py clip.mp4
+Stopping: press Ctrl+C to stop playback.
+Formats: it plays .mp4, .avi, .mov, .mkv, .webm, .wmv and .flv.
+Speed: it plays at the video’s own speed and skips frames if your computer can’t keep up, so it stays in sync.
+Size: the picture shrinks automatically to fit your window height, so it doesn’t scroll.
+Options: the earlier options work on video too. For example, --mode edges outlines the video with -, |, / and \. --color adds color, and --loop repeats the video.
+Speed override: --fps 15 plays at a speed you choose.
+Sound: there is no sound, only the picture.
+Lag: if it lags, use a smaller --width. Edges and color modes are slower than the default shade mode.
+Images still work the same way as before, and your folder option now picks up videos too.
+
+
+Img2cmd
+PY 
+
+Readme
+Document·MD 
+what are the other world trnds for thiskind of things
+
+Searched the web
+ASCII art is having a revival, and most of the activity I found is in the same directions your app already covers. These are the main trends, though the evidence is mostly individual tools and projects, not hard statistics.
+
+Color instead of plain black and white. ANSI art adds color codes to what used to be monochrome text art, and this is described as one of the biggest trends. 
+bluetext
+Video, not just still images. There are terminal players for it, such as a script that plays videos as colorful ASCII art using mplayer and libcaca. Another open-source project, Idle-Noise, converts images and videos to ASCII, loops videos forever, and lets you control the frame rate and choose color themes like amber. It also has a raster-scan effect for a CRT look. 
+gitea
+github
+Exporting the result as a real image or video. One generator processes each video frame as an image, converts it to ASCII, and reassembles the frames into a video file. A design plugin does the same and exports to PNG or WebM. 
+aiindigo
+framer
+Presets and visual styles. The same plugin ships 16 presets such as Matrix, Cyberpunk, Blueprint and Retro PC, plus many character sets and color modes. 
+framer
+Use in web design. Developers publish animated ASCII components baked to looping video, meant for hero sections and retro terminal-style backgrounds. 
+21st
+Audio-reactive and generative art. There are also pipelines for audio-reactive music visualizers and generative ASCII animations. Articles also mention AI-generated ASCII art, and ASCII used for creative coding and data visualization. 
+skills
+bluetext
+The retro, minimalist look. One reviewer says that with so much visual noise in 2026, ASCII art offers a refreshing minimalist alternative. 
+aiindigo
+Some of these sources are low-quality blog posts, so I leaned on the actual tools and projects.
+
+Your app already has color, video, edges mode and frame-rate control. If you want to go further without making it complicated, the most natural next steps are:
+
+Colour themes like green (Matrix) or amber, with a single --theme option.
+Saving a video as a .mp4 or .gif of the text art, so you can share it.
+Live webcam in the terminal.
+I can add any of these if you like.
+
+do this
+
+Ran 2 commands, read a file, shared files
+I added all three to img2cmd.py and updated README.md. I tested themes and saving pictures, MP4s and GIFs on sample files. I couldn’t test the webcam here because this environment has no camera, so try that one on your computer.
+
+1. Themes
+
+python img2cmd.py photo.jpg --theme matrix
+Choices are matrix (green), amber, cyan, red, purple and white. They keep the picture’s brightness, so it still has depth. They work with images, video and webcam, and with edges mode.
+
+2. Saving as a picture or video
+
+python img2cmd.py photo.jpg --out result.png
+python img2cmd.py clip.mp4 --out result.mp4 --theme matrix
+python img2cmd.py clip.mp4 --out result.gif --seconds 5
+It draws the text onto a black background, so you get a real file you can share. Saved videos have no sound, and rendering takes a while. Use --seconds 5 for a quick test, and keep GIFs short because they get big.
+
+3. Live webcam
+
+python img2cmd.py --webcam
+python img2cmd.py --webcam 1 --theme cyan
+The picture is mirrored, like a real mirror, and Ctrl+C stops it. The optional number picks which camera to use if you have more than one. Put --webcam last, or use it on its own.
+
+I also added --seconds to limit how much of a video is played or saved.
+
+
+Img2cmd
+PY 
+
+Readme
+Document·MD 
+
+
+
+Claude is AI and can make mistakes.
+Img2cmd · PY
+"""
+img2cmd.py - images, videos and webcam as text art (/ - | \\ = # ...) in Command Prompt
+ 
 Setup (once):  pip install pillow opencv-python
 Examples:
-  python img2cmd.py                           (asks you for a file)
   python img2cmd.py photo.jpg
-  python img2cmd.py photo.jpg --mode edges    (outline using - | / \\)
-  python img2cmd.py clip.mp4                  (plays the video, Ctrl+C to stop)
-  python img2cmd.py clip.mp4 --color --loop
-  python img2cmd.py photos_folder             (all images in a folder)
+  python img2cmd.py photo.jpg --mode edges --theme matrix
+  python img2cmd.py clip.mp4 --theme amber --loop          (play video, Ctrl+C to stop)
+  python img2cmd.py clip.mp4 --out result.mp4               (save text-art video)
+  python img2cmd.py photo.jpg --out result.png              (save text-art picture)
+  python img2cmd.py --webcam                                (live camera, Ctrl+C to stop)
 """
 import argparse
 import math
@@ -16,13 +109,20 @@ import os
 import shutil
 import sys
 import time
-from PIL import Image, ImageEnhance, ImageOps
-
+from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
+ 
 RAMP = " .-/=#@"  # darkest -> brightest
 IMG_EXTS = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
 VID_EXTS = (".mp4", ".avi", ".mov", ".mkv", ".webm", ".wmv", ".flv")
-
-
+THEMES = {
+    "matrix": (0, 255, 65), "amber": (255, 176, 0), "cyan": (0, 230, 255),
+    "red": (255, 60, 60), "purple": (190, 100, 255), "white": (255, 255, 255),
+}
+DEFAULT_FG = (210, 210, 210)  # text color in saved files when no color is used
+ 
+ 
+# ---------- core: image -> grid of (character, color) ----------
+ 
 def edge_char(gray, x, y, w, h, threshold):
     """Pick - | / \\ from the image gradient at (x, y); space if no edge."""
     def p(i, j):
@@ -39,23 +139,24 @@ def edge_char(gray, x, y, w, h, threshold):
     if a < 112.5:
         return "|"
     return "/"
-
-
-def convert(img, o):
-    """PIL image -> one string of text art. `o` holds the options."""
+ 
+ 
+def build_grid(img, o):
+    """PIL image -> rows of (char, rgb or None)."""
     img = img.convert("RGB")
     w0, h0 = img.size
-    h = max(1, int(h0 / w0 * o.width * 0.5))  # characters are ~2x taller than wide
-    img = img.resize((o.width, h), Image.BILINEAR)
+    w = o.width
+    h = max(1, int(h0 / w0 * w * 0.5))  # characters are ~2x taller than wide
+    img = img.resize((w, h), Image.BILINEAR)
     img = ImageEnhance.Contrast(img).enhance(o.contrast)
     img = ImageEnhance.Brightness(img).enhance(o.brightness)
-    w = o.width
-
+ 
     gray = ImageOps.autocontrast(img.convert("L")).load()
     rgb = img.load()
     chars = o.ramp[::-1] if o.invert else o.ramp
     n = len(chars)
-
+    base = THEMES.get(o.theme)
+ 
     rows = []
     for y in range(h):
         row = []
@@ -64,60 +165,165 @@ def convert(img, o):
                 ch = chars[min(gray[x, y] * n // 256, n - 1)]
             else:
                 ch = edge_char(gray, x, y, w, h, o.threshold)
-            if o.color:
-                r, g, b = rgb[x, y]
-                row.append(f"\x1b[38;2;{r};{g};{b}m{ch}")
+            if base:
+                k = 1.0 if o.mode == "edges" else 0.25 + 0.75 * gray[x, y] / 255
+                col = (int(base[0] * k), int(base[1] * k), int(base[2] * k))
+            elif o.color:
+                col = rgb[x, y]
             else:
-                row.append(ch)
-        rows.append("".join(row) + ("\x1b[0m" if o.color else ""))
-    return "\n".join(rows)
-
-
-def plain_text(img, o):
-    old, o.color = o.color, False
-    try:
-        return convert(img, o)
-    finally:
-        o.color = old
-
-
+                col = None
+            row.append((ch, col))
+        rows.append(row)
+    return rows
+ 
+ 
+def to_plain(grid):
+    return "\n".join("".join(c for c, _ in row) for row in grid)
+ 
+ 
+def to_ansi(grid):
+    lines = []
+    for row in grid:
+        parts = []
+        for ch, col in row:
+            if col is None or ch == " ":
+                parts.append(ch)
+            else:
+                parts.append(f"\x1b[38;2;{col[0]};{col[1]};{col[2]}m{ch}")
+        lines.append("".join(parts) + "\x1b[0m")
+    return "\n".join(lines)
+ 
+ 
+def to_terminal(grid, o):
+    return to_ansi(grid) if (o.color or o.theme) else to_plain(grid)
+ 
+ 
+# ---------- saving as picture / video ----------
+ 
+class Painter:
+    """Draws a grid onto a black picture using a monospace font."""
+    def __init__(self, size=14):
+        self.font = None
+        for name in ("consola.ttf", "Consolas.ttf", "cour.ttf", "DejaVuSansMono.ttf",
+                     "LiberationMono-Regular.ttf", "Menlo.ttc", "Courier New.ttf"):
+            try:
+                self.font = ImageFont.truetype(name, size)
+                break
+            except OSError:
+                continue
+        if self.font is None:
+            self.font = ImageFont.load_default()
+        ascent, descent = self.font.getmetrics() if hasattr(self.font, "getmetrics") else (size, 3)
+        self.cw = max(1, math.ceil(self.font.getlength("M")))
+        self.chh = ascent + descent
+ 
+    def draw(self, grid):
+        h, w = len(grid), len(grid[0])
+        W, H = (w * self.cw) // 2 * 2 + 2, (h * self.chh) // 2 * 2 + 2  # even sizes for video
+        pic = Image.new("RGB", (W, H), (0, 0, 0))
+        d = ImageDraw.Draw(pic)
+        for y, row in enumerate(grid):
+            if all(c is None for _, c in row):
+                d.text((0, y * self.chh), "".join(ch for ch, _ in row), font=self.font, fill=DEFAULT_FG)
+                continue
+            for x, (ch, col) in enumerate(row):
+                if ch != " ":
+                    d.text((x * self.cw, y * self.chh), ch, font=self.font, fill=col or DEFAULT_FG)
+        return pic
+ 
+ 
+def numbered(path, source, many):
+    if not many:
+        return path
+    stem, ext = os.path.splitext(path)
+    return f"{stem}_{os.path.splitext(os.path.basename(source))[0]}{ext}"
+ 
+ 
+def export_video(src, o):
+    import cv2
+    import numpy as np
+    cap = cv2.VideoCapture(src)
+    if not cap.isOpened():
+        print(f"Could not open video: {src}")
+        return
+    fps = o.fps or cap.get(cv2.CAP_PROP_FPS) or 24
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+    limit = int(o.seconds * fps) if o.seconds else None
+    if limit and total:
+        total = min(total, limit)
+    out_path = o.out
+    is_gif = out_path.lower().endswith(".gif")
+    painter, writer, frames, i = Painter(), None, [], 0
+ 
+    while True:
+        ok, frame = cap.read()
+        if not ok or (limit and i >= limit):
+            break
+        grid = build_grid(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), o)
+        pic = painter.draw(grid)
+        if is_gif:
+            frames.append(pic.quantize(colors=64))
+        else:
+            if writer is None:
+                writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, pic.size)
+            writer.write(cv2.cvtColor(np.array(pic), cv2.COLOR_RGB2BGR))
+        i += 1
+        print(f"\rRendering frame {i}" + (f"/{total}" if total else ""), end="", flush=True)
+    cap.release()
+    print()
+    if is_gif and frames:
+        frames[0].save(out_path, save_all=True, append_images=frames[1:], loop=0,
+                       duration=int(1000 / fps), optimize=False)
+    if writer:
+        writer.release()
+    print(f"Saved {out_path} ({i} frames, no sound)")
+ 
+ 
+# ---------- showing ----------
+ 
 def show_image(path, o, many):
     try:
         img = Image.open(path)
     except Exception as e:
         print(f"Could not open {path}: {e}")
         return
+    grid = build_grid(img, o)
     if many:
         print(f"\n=== {os.path.basename(path)} ===")
-    print(convert(img, o))
+    print(to_terminal(grid, o))
     if o.save:
-        out = o.save
-        if many:
-            stem, ext = os.path.splitext(o.save)
-            out = f"{stem}_{os.path.splitext(os.path.basename(path))[0]}{ext or '.txt'}"
-        with open(out, "w", encoding="utf-8") as fh:
-            fh.write(plain_text(img, o))
-
-
-def play_video(path, o):
+        with open(numbered(o.save, path, many), "w", encoding="utf-8") as fh:
+            fh.write(to_plain(grid))
+    if o.out:
+        target = numbered(o.out, path, many)
+        Painter().draw(grid).save(target)
+        print(f"Saved {target}")
+ 
+ 
+def play(src, o, live=False):
+    """Play a video file, or a live camera if live=True (src is then a camera number)."""
     try:
         import cv2
     except ImportError:
-        print("Video needs OpenCV. Run:  pip install opencv-python")
+        print("Video and webcam need OpenCV. Run:  pip install opencv-python")
         return
-    cap = cv2.VideoCapture(path)
+    if live and os.name == "nt":
+        cap = cv2.VideoCapture(src, cv2.CAP_DSHOW)  # faster camera start on Windows
+    else:
+        cap = cv2.VideoCapture(src)
     if not cap.isOpened():
-        print(f"Could not open video: {path}")
+        print("Could not open the camera." if live else f"Could not open video: {src}")
         return
-    fps = o.fps or cap.get(cv2.CAP_PROP_FPS) or 24
+    fps = o.fps or (15 if live else cap.get(cv2.CAP_PROP_FPS)) or 24
     vw = cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 16
     vh = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 9
-
+ 
     # keep the whole frame on screen: shrink width if it would be too tall
     rows = shutil.get_terminal_size().lines - 1
     if vh / vw * o.width * 0.5 > rows:
         o.width = max(20, int(rows / (vh / vw * 0.5)))
-
+ 
+    limit = int(o.seconds * fps) if o.seconds else None
     out = sys.stdout
     out.write("\x1b[2J\x1b[?25l")  # clear screen, hide cursor
     try:
@@ -125,19 +331,21 @@ def play_video(path, o):
             start, i = time.perf_counter(), 0
             while True:
                 ok, frame = cap.read()
-                if not ok:
+                if not ok or (limit and i >= limit):
                     break
                 expected = start + i / fps
                 i += 1
-                if time.perf_counter() > expected + 1 / fps:
+                if not live and time.perf_counter() > expected + 1 / fps:
                     continue  # running late: skip this frame to stay in sync
+                if live:
+                    frame = cv2.flip(frame, 1)  # mirror, like a real mirror
                 img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                out.write("\x1b[H" + convert(img, o) + "\n")
+                out.write("\x1b[H" + to_terminal(build_grid(img, o), o) + "\n")
                 out.flush()
                 wait = expected - time.perf_counter()
                 if wait > 0:
                     time.sleep(wait)
-            if not o.loop:
+            if live or not o.loop:
                 break
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
     except KeyboardInterrupt:
@@ -145,8 +353,8 @@ def play_video(path, o):
     finally:
         out.write("\x1b[0m\x1b[?25h\n")  # restore colors and cursor
         cap.release()
-
-
+ 
+ 
 def find_files(paths):
     out = []
     for p in paths:
@@ -157,39 +365,56 @@ def find_files(paths):
         else:
             out.append(p)
     return out
-
-
+ 
+ 
 def main():
-    ap = argparse.ArgumentParser(description="Convert images and videos to text art.")
+    ap = argparse.ArgumentParser(description="Convert images, videos and webcam to text art.")
     ap.add_argument("files", nargs="*", help="image/video file(s) or folder(s)")
+    ap.add_argument("--webcam", nargs="?", type=int, const=0, metavar="N",
+                    help="live camera (camera number N, default 0). Put it last or use it alone")
     ap.add_argument("--width", type=int, help="characters per line (default: window width)")
     ap.add_argument("--mode", choices=["shade", "edges"], default="shade",
                     help="shade = brightness characters, edges = outline with - | / \\")
+    ap.add_argument("--theme", choices=sorted(THEMES), help="one-color look, e.g. matrix or amber")
+    ap.add_argument("--color", action="store_true", help="original photo colors")
     ap.add_argument("--ramp", default=RAMP, help='characters dark->bright, default "%s"' % RAMP)
-    ap.add_argument("--color", action="store_true", help="colored output")
     ap.add_argument("--invert", action="store_true", help="swap light and dark")
     ap.add_argument("--contrast", type=float, default=1.0, help="1.0 = normal, 1.5 = stronger")
     ap.add_argument("--brightness", type=float, default=1.0, help="1.0 = normal")
     ap.add_argument("--threshold", type=float, default=120, help="edge sensitivity (lower = more lines)")
-    ap.add_argument("--save", help="save plain text of an image to this file")
-    ap.add_argument("--fps", type=float, help="video: play at this speed instead of the original")
+    ap.add_argument("--save", help="save plain text of an image to this .txt file")
+    ap.add_argument("--out", help="save as picture (.png) or video (.mp4 / .gif)")
+    ap.add_argument("--fps", type=float, help="video/webcam speed (default: original / 15)")
+    ap.add_argument("--seconds", type=float, help="video: only the first N seconds")
     ap.add_argument("--loop", action="store_true", help="video: repeat until Ctrl+C")
     o = ap.parse_args()
-
+ 
     os.system("")  # lets older Windows consoles show colors
-
+ 
+    if o.webcam is not None:
+        o.width = o.width or max(20, shutil.get_terminal_size().columns - 1)
+        play(o.webcam, o, live=True)
+        return
+ 
     files = find_files(o.files or [input("Drag an image or video here and press Enter: ")])
     if not files:
         print("No images or videos found.")
         return
-    o.width = o.width or max(20, shutil.get_terminal_size().columns - 1)
-
+    o.width = o.width or (100 if o.out else max(20, shutil.get_terminal_size().columns - 1))
+ 
     for f in files:
         if f.lower().endswith(VID_EXTS):
-            play_video(f, o)
+            if o.out:
+                o_copy = argparse.Namespace(**vars(o))
+                o_copy.out = numbered(o.out, f, len(files) > 1)
+                export_video(f, o_copy)
+            else:
+                play(f, o)
         else:
             show_image(f, o, many=len(files) > 1)
-
-
+ 
+ 
 if __name__ == "__main__":
     main()
+ 
+Claude finished the response
